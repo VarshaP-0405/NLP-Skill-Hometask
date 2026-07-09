@@ -1,0 +1,96 @@
+from collections import defaultdict
+corpus = [
+    "best places to visit in india",
+    "best places to visit in chennai",
+    "best places to visit in summer",
+    "best places to visit near me",
+    "best places to eat in chennai",
+    "best places to eat in bangalore",
+    "top places to visit in india",
+    "best hotels to stay in chennai",
+    "best restaurants near me",
+    "places to visit during summer",
+    "places to visit in kerala",
+    "places to visit in goa",
+    "places to visit in delhi",
+    "best places to visit during winter",
+    "best places to visit with family"
+]
+
+D = 0.75
+vocab = set()
+for sentence in corpus:
+    vocab.update(sentence.lower().split())
+vocab.add("<UNK>")
+ngram_counts = {
+    1: defaultdict(int),
+    2: defaultdict(int),
+    3: defaultdict(int),
+    4: defaultdict(int),
+    5: defaultdict(int)
+}
+history_counts = {
+    2: defaultdict(int),
+    3: defaultdict(int),
+    4: defaultdict(int),
+    5: defaultdict(int)
+}
+for sentence in corpus:
+    words = sentence.lower().split()
+    words = [w if w in vocab else "<UNK>" for w in words]
+    for n in range(1, 6):
+        for i in range(len(words)-n+1):
+            gram = tuple(words[i:i+n])
+            ngram_counts[n][gram] += 1
+            if n > 1:
+                history = gram[:-1]
+                history_counts[n][history] += 1
+continuation = {
+    2: defaultdict(set),
+    3: defaultdict(set),
+    4: defaultdict(set),
+    5: defaultdict(set)
+}
+followers = {
+    2: defaultdict(set),
+    3: defaultdict(set),
+    4: defaultdict(set),
+    5: defaultdict(set)
+}
+for n in range(2,6):
+    for gram in ngram_counts[n]:
+        history = gram[:-1]
+        word = gram[-1]
+        continuation[n][word].add(history)
+        followers[n][history].add(word)
+def kneser_ney(history, word):
+    order = len(history) + 1
+    if order == 1:
+        total = sum(ngram_counts[1].values())
+        return ngram_counts[1].get((word,),0) / total
+    gram = history + (word,)
+    count = ngram_counts[order].get(gram,0)
+    hist_count = history_counts[order].get(history,0)
+    if hist_count == 0:
+        return kneser_ney(history[1:],word)
+    discounted = max(count-D,0)/hist_count
+    backoff = (D*len(followers[order][history]))/hist_count
+    return discounted + backoff*kneser_ney(history[1:],word)
+def predict(query,top_k=5):
+    words = query.lower().split()
+    words = [w if w in vocab else "<UNK>" for w in words]
+    history = tuple(words[-4:])
+    scores=[]
+    for word in vocab:
+        if word=="<UNK>":
+            continue
+        score=kneser_ney(history,word)
+        scores.append((word,score))
+    scores.sort(key=lambda x:x[1],reverse=True)
+    return scores[:top_k]
+query="best places to visit"
+print("User Query :",query)
+print()
+print("Suggestions")
+for word,score in predict(query):
+    print(word,"->",round(score,5))
